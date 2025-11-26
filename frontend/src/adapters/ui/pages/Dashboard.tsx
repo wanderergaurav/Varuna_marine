@@ -47,6 +47,11 @@ export const Dashboard = () => {
     [selectedEntries]
   );
   const poolingSelectedYear = selectedList[0]?.year;
+  const poolSum = useMemo(
+    () => selectedList.reduce((sum, entry) => sum + entry.cbGco2eq, 0),
+    [selectedList]
+  );
+  const poolSumValid = poolSum >= 0;
 
   const toggleSelection = (entry: ShipCompliance) => {
     const key = `${entry.shipId}-${entry.year}`;
@@ -310,6 +315,15 @@ export const Dashboard = () => {
       title: "Compare",
       contents: (
         <>
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm">
+              <strong>Target Intensity:</strong> 89.3368 gCO₂e/MJ (2% below 91.16 gCO₂e/MJ baseline for 2025)
+            </p>
+            <p className="text-sm mt-1">
+              Routes with GHG intensity below target are <span className="text-green-600 font-semibold">compliant ✅</span>
+            </p>
+          </div>
+
           <Table
             resource={comparisonResource}
             columns={[
@@ -322,8 +336,15 @@ export const Dashboard = () => {
                 render: route => formatNumber(route.ghgIntensity)
               },
               {
-                header: "% difference",
-                render: route => formatNumber(route.percentDiff)
+                header: "% difference from baseline",
+                render: route => {
+                  const sign = route.percentDiff > 0 ? '+' : '';
+                  return (
+                    <span className={route.percentDiff > 0 ? 'text-red-600' : 'text-green-600'}>
+                      {sign}{formatNumber(route.percentDiff)}%
+                    </span>
+                  );
+                }
               },
               {
                 header: "compliant",
@@ -332,39 +353,69 @@ export const Dashboard = () => {
             ]}
           />
 
-          <svg viewBox="0 0 512 512" className="m-16">
-            <text y="500">80</text>
-            <text y="256">90</text>
-            <text y="12">100</text>
-            <line x1="32" y1="6" x2="32" y2="500" stroke="black"></line>
-            <line x1="28" y1="496" x2="496" y2="496" stroke="black"></line>
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold mb-3">GHG Intensity Comparison</h3>
+            <svg viewBox="0 0 600 400" className="w-full h-64 border rounded-lg bg-white">
+              {/* Y-axis labels and grid */}
+              <text x="10" y="40" fontSize="12" fill="#666">100</text>
+              <text x="10" y="140" fontSize="12" fill="#666">95</text>
+              <text x="10" y="240" fontSize="12" fill="#666">90</text>
+              <text x="10" y="340" fontSize="12" fill="#666">85</text>
+              <text x="10" y="380" fontSize="12" fill="#666">80</text>
 
-            {comparisonResource.data?.map((route, i) => {
-              const x = 64 + i * 460 / comparisonResource.data!.length;
-              const height = (route.ghgIntensity / 20 - 4) * 490;
+              {/* Target line */}
+              <line x1="50" y1="260" x2="580" y2="260" stroke="#22c55e" strokeWidth="2" strokeDasharray="5,5" />
+              <text x="520" y="255" fontSize="10" fill="#22c55e">Target: 89.34</text>
 
-              return (
-                <g>
-                  <rect
-                    x={x}
-                    y={496 - height}
-                    width="32"
-                    height={height - 1}
-                    // This is a colour generation formula that I came up with for a previous project.
-                    // You can find a mostly-complete explanation through the following links:
-                    // https://bolshoy.ddns.net/files/colour_maths.jpg
-                    // https://www.desmos.com/calculator/o988gkndov
-                    fill={i
-                      ? "hsl(" + (180 + 360 * i) / (2 ** Math.floor(Math.log2(i))) + " 100 45)"
-                      : "hsl(0 100 45)"
-                    }
-                  ></rect>
-                  <rect></rect>
-                  <text x={x} y="512">{route.routeId}</text>
-                </g>
-              )
-            })}
-          </svg>
+              {/* Axes */}
+              <line x1="50" y1="30" x2="50" y2="380" stroke="#333" strokeWidth="2" />
+              <line x1="50" y1="380" x2="580" y2="380" stroke="#333" strokeWidth="2" />
+
+              {/* Bars */}
+              {comparisonResource.data?.map((route, i) => {
+                const barWidth = 80;
+                const spacing = 100;
+                const x = 80 + i * spacing;
+                // Scale: 80-100 range maps to 380-30 pixels (350px height)
+                const yScale = (val: number) => 380 - ((val - 80) / 20) * 350;
+                const barHeight = 380 - yScale(route.ghgIntensity);
+                const y = yScale(route.ghgIntensity);
+                const color = route.compliant ? '#22c55e' : '#ef4444';
+
+                return (
+                  <g key={route.routeId}>
+                    <rect
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      fill={color}
+                      opacity="0.8"
+                    />
+                    <text
+                      x={x + barWidth / 2}
+                      y={y - 5}
+                      fontSize="11"
+                      fill="#333"
+                      textAnchor="middle"
+                      fontWeight="bold"
+                    >
+                      {route.ghgIntensity.toFixed(1)}
+                    </text>
+                    <text
+                      x={x + barWidth / 2}
+                      y="395"
+                      fontSize="12"
+                      fill="#333"
+                      textAnchor="middle"
+                    >
+                      {route.routeId}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
         </>
       )
     },
@@ -516,10 +567,25 @@ export const Dashboard = () => {
             </table>
           </div>
 
+          {selectedList.length > 0 && (
+            <div className={`p-4 rounded-lg border-2 ${poolSumValid ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+              <p className="font-semibold">
+                Pool Sum: {formatNumber(poolSum)} gCO₂e
+              </p>
+              <p className="text-sm mt-1">
+                {poolSumValid ? (
+                  <span className="text-green-700">✅ Valid: Sum ≥ 0 (pool can be created)</span>
+                ) : (
+                  <span className="text-red-700">❌ Invalid: Sum &lt; 0 (pool cannot be created)</span>
+                )}
+              </p>
+            </div>
+          )}
+
           <button
             type="button"
             className="rounded-2xl border bg-cyan-100 px-4 py-2 disabled:opacity-50"
-            disabled={!selectedList.length || creationState.status === 'saving'}
+            disabled={!selectedList.length || !poolSumValid || creationState.status === 'saving'}
             onClick={handleCreatePool}
           >
             {creationState.status === 'saving' ? 'Creating Pool…' : 'Create Pool'}
@@ -553,13 +619,20 @@ export const Dashboard = () => {
             <p className="text-sm text-slate-500">No pools have been created yet.</p>
           )}
 
-          {poolsResource.data?.map((pool) => (
+          {poolsResource.data?.map((pool) => {
+            const poolTotalBefore = pool.members.reduce((sum, m) => sum + m.cbBefore, 0);
+            const poolTotalAfter = pool.members.reduce((sum, m) => sum + m.cbAfter, 0);
+            return (
             <div key={pool.id} className="rounded-xl border p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="font-semibold">Pool #{pool.id}</p>
                   <p className="text-sm text-slate-600">
                     Year {pool.year} • Created {new Date(pool.createdAt).toLocaleString()}
+                  </p>
+                  <p className="text-sm mt-1">
+                    Total CB Before: <span className="font-mono">{formatNumber(poolTotalBefore)}</span> gCO₂e → 
+                    After: <span className="font-mono">{formatNumber(poolTotalAfter)}</span> gCO₂e
                   </p>
                 </div>
                 <span className="text-sm text-slate-600">
@@ -593,7 +666,8 @@ export const Dashboard = () => {
                 <p className="text-sm text-slate-500">No members recorded.</p>
               )}
             </div>
-          ))}
+            );
+          })}
         </>
       )
     }

@@ -10,6 +10,7 @@ import { BankSurplusService } from '../../core/application/bankSurplusService';
 import { ComparisonService } from '../../core/application/comparisonService';
 import { CreatePoolService } from '../../core/application/createPoolService';
 import { GetComplianceBalanceService } from '../../core/application/getComplianceBalanceService';
+import { GetAdjustedComplianceBalanceService } from '../../core/application/getAdjustedComplianceBalanceService';
 import { ListBankEntriesService } from '../../core/application/listBankEntriesService';
 import { ListBankHistoryService } from '../../core/application/listBankHistoryService';
 import { ListComplianceService } from '../../core/application/listComplianceService';
@@ -35,6 +36,11 @@ export const startServer = async () => {
 
   const getComplianceBalanceService = new GetComplianceBalanceService(
     bankingRepository
+  );
+
+  const getAdjustedComplianceBalanceService = new GetAdjustedComplianceBalanceService(
+    bankingRepository,
+    bankEntriesRepository
   );
 
   const listComplianceService = new ListComplianceService(
@@ -70,6 +76,7 @@ export const startServer = async () => {
     setBaselineService,
     comparisonService,
     getComplianceBalanceService,
+    getAdjustedComplianceBalanceService,
     listBankEntriesService,
     bankSurplusService,
     applyBankedSurplusService,

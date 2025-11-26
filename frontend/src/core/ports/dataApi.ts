@@ -6,6 +6,7 @@ export interface DataApiPort {
   getComparison(): Promise<Comparison[]>;
   getCompliance(): Promise<ShipCompliance[]>;
   getBankRecord(shipId: string, year: string): Promise<BankRecord | undefined>;
+  getAdjustedCB(shipId: string, year: string): Promise<BankRecord | undefined>;
   bankSurplus(shipId: string, year: string): Promise<BankRecord | undefined>;
   applyBankedSurplus(shipId: string, year: string): Promise<BankRecord | undefined>;
   getBankHistory(shipId: string): Promise<BankEntry[]>;

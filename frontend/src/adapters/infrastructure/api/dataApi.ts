@@ -44,6 +44,7 @@ export const createDataApi = (): DataApiPort => ({
   getComparison: () => httpGet<Comparison[]>('/routes/comparison'),
   getCompliance: () => httpGet<ShipCompliance[]>('/compliance'),
   getBankRecord: (shipId, year) => httpGet<BankRecord | undefined>(`/compliance/cb?shipId=${shipId}&year=${year}`),
+  getAdjustedCB: (shipId, year) => httpGet<BankRecord | undefined>(`/compliance/adjusted-cb?shipId=${shipId}&year=${year}`),
   bankSurplus: (shipId, year) => httpPost<BankRecord | undefined>('/banking/bank', { shipId, year }),
   applyBankedSurplus: (shipId, year) => httpPost<BankRecord | undefined>('/banking/apply', { shipId, year }),
   getBankHistory: (shipId) => httpGet<BankEntry[]>(`/banking/history?shipId=${encodeURIComponent(shipId)}`),

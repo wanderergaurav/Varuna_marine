@@ -1,9 +1,11 @@
 import express, { NextFunction, Request, Response } from 'express';
+import cors from 'cors';
 import { ApplyBankedSurplusService } from '../../../core/application/applyBankedSurplusService';
 import { BankSurplusService } from '../../../core/application/bankSurplusService';
 import { ComparisonService } from '../../../core/application/comparisonService';
 import { CreatePoolService } from '../../../core/application/createPoolService';
 import { GetComplianceBalanceService } from '../../../core/application/getComplianceBalanceService';
+import { GetAdjustedComplianceBalanceService } from '../../../core/application/getAdjustedComplianceBalanceService';
 import { ListBankEntriesService } from '../../../core/application/listBankEntriesService';
 import { ListBankHistoryService } from '../../../core/application/listBankHistoryService';
 import { ListComplianceService } from '../../../core/application/listComplianceService';
@@ -16,6 +18,7 @@ export interface HttpServerDependencies {
   setBaselineService: SetBaselineService;
   comparisonService: ComparisonService;
   getComplianceBalanceService: GetComplianceBalanceService;
+  getAdjustedComplianceBalanceService: GetAdjustedComplianceBalanceService;
   listBankEntriesService: ListBankEntriesService;
   bankSurplusService: BankSurplusService;
   applyBankedSurplusService: ApplyBankedSurplusService;
@@ -40,6 +43,7 @@ export const buildHttpServer = ({
   setBaselineService,
   comparisonService,
   getComplianceBalanceService,
+  getAdjustedComplianceBalanceService,
   listBankEntriesService,
   bankSurplusService,
   applyBankedSurplusService,
@@ -50,6 +54,7 @@ export const buildHttpServer = ({
 }: HttpServerDependencies) => {
   const app = express();
   app.disable('x-powered-by');
+  app.use(cors());
   app.use(express.json());
 
   app.get(
@@ -95,6 +100,20 @@ export const buildHttpServer = ({
     wrap(async (_req, res) => {
       const compliance = await listComplianceService.execute();
       res.json(compliance);
+    })
+  );
+
+  app.get(
+    '/compliance/adjusted-cb',
+    wrap(async (req, res) => {
+      if (typeof req.query.shipId == 'string' && typeof req.query.year == 'string') {
+        const adjustedCB = await getAdjustedComplianceBalanceService.execute(
+          req.query.shipId,
+          req.query.year
+        );
+        res.json(adjustedCB);
+      } else
+        res.sendStatus(400);
     })
   );
 

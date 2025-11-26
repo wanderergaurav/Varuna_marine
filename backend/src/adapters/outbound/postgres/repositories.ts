@@ -307,14 +307,10 @@ export class PostgresPoolsRepository
 
     try {
       await client.query('BEGIN');
-      const { rows } = await client.query<{ id: number; year: number; created_at: Date }>(
-        `INSERT INTO pools (year, created_at) VALUES ($1, NOW())
-        RETURNING id, year, created_at`,
-        [year]
-      );
-      const poolRow = rows[0];
-      const members: PoolMember[] = [];
-
+      
+      // Fetch all compliance balances
+      const members: { shipId: string; cbBefore: number; cbAfter: number }[] = [];
+      
       for (const shipId of uniqueShipIds) {
         const { rows: complianceRows } = await client.query<{ cb_gco2eq: number }>(
           `SELECT cb_gco2eq FROM ship_compliance WHERE ship_id = $1 AND year = $2`,
@@ -325,19 +321,76 @@ export class PostgresPoolsRepository
           throw new Error(`No compliance record for ship ${shipId} in ${year}`);
         }
 
-        const cbBefore = complianceRows[0].cb_gco2eq;
+        members.push({
+          shipId,
+          cbBefore: complianceRows[0].cb_gco2eq,
+          cbAfter: complianceRows[0].cb_gco2eq
+        });
+      }
 
+      // Validate pooling rules
+      const totalCB = members.reduce((sum, m) => sum + m.cbBefore, 0);
+      if (totalCB < 0) {
+        throw new Error(`Pool validation failed: Sum of CB (${totalCB.toFixed(2)}) must be >= 0`);
+      }
+
+      // Implement greedy allocation algorithm
+      // Sort members by CB descending (surplus ships first)
+      members.sort((a, b) => b.cbBefore - a.cbBefore);
+
+      // Transfer surplus to deficit ships
+      for (let i = 0; i < members.length; i++) {
+        if (members[i].cbAfter <= 0) continue; // No surplus to transfer
+
+        for (let j = members.length - 1; j > i; j--) {
+          if (members[j].cbAfter >= 0) break; // No deficit to cover
+
+          const deficit = -members[j].cbAfter;
+          const surplus = members[i].cbAfter;
+          const transfer = Math.min(deficit, surplus);
+
+          members[i].cbAfter -= transfer;
+          members[j].cbAfter += transfer;
+
+          if (members[i].cbAfter <= 0) break;
+        }
+      }
+
+      // Validate rules after allocation
+      for (const member of members) {
+        // Deficit ship cannot exit worse
+        if (member.cbBefore < 0 && member.cbAfter < member.cbBefore) {
+          throw new Error(
+            `Pool validation failed: Deficit ship ${member.shipId} would exit worse (${member.cbBefore} -> ${member.cbAfter})`
+          );
+        }
+        // Surplus ship cannot exit negative
+        if (member.cbBefore > 0 && member.cbAfter < 0) {
+          throw new Error(
+            `Pool validation failed: Surplus ship ${member.shipId} cannot exit negative (${member.cbBefore} -> ${member.cbAfter})`
+          );
+        }
+      }
+
+      // Create pool and store members
+      const { rows } = await client.query<{ id: number; year: number; created_at: Date }>(
+        `INSERT INTO pools (year, created_at) VALUES ($1, NOW())
+        RETURNING id, year, created_at`,
+        [year]
+      );
+      const poolRow = rows[0];
+
+      const poolMembers: PoolMember[] = [];
+      for (const member of members) {
         await client.query(
           `INSERT INTO pool_members (pool_id, ship_id, cb_before, cb_after)
           VALUES ($1, $2, $3, $4)`,
-          [poolRow.id, shipId, cbBefore, cbBefore]
+          [poolRow.id, member.shipId, member.cbBefore, member.cbAfter]
         );
 
-        members.push({
+        poolMembers.push({
           poolId: poolRow.id,
-          shipId,
-          cbBefore,
-          cbAfter: cbBefore
+          ...member
         });
       }
 
@@ -347,7 +400,7 @@ export class PostgresPoolsRepository
         id: poolRow.id,
         year: poolRow.year,
         createdAt: poolRow.created_at,
-        members
+        members: poolMembers
       };
     } catch (error) {
       await client.query('ROLLBACK');
