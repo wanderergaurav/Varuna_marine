@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.app.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "paths": {
+      "@core/*": ["core/*"],
+      "@shared/*": ["shared/*"],
+      "@adapters/*": ["adapters/*"]
+    }
+  }
+}
+
